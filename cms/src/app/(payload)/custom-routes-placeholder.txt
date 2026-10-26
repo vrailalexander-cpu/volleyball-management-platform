@@ -1,0 +1,1 @@
+Payload admin and REST API routes are mounted by the route handlers in this directory.

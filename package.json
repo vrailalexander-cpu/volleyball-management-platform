@@ -1,0 +1,19 @@
+{
+  "name": "volleyball-management-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["frontend", "cms", "backend"],
+  "scripts": {
+    "dev": "concurrently -n backend,cms,frontend -c blue,magenta,green \"npm run dev:backend\" \"npm run dev:cms\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:cms": "npm --workspace cms run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build": "npm run build --workspace backend && npm run build --workspace cms && npm run build --workspace frontend",
+    "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace cms && npm run typecheck --workspace frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": { "node": ">=20.9.0", "npm": ">=10.0.0" }
+}
