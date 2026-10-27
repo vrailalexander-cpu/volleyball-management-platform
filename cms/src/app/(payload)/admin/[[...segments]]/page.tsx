@@ -85,10 +85,10 @@ export default async function Page({ params }: PageProps) {
 
           <div className="flex flex-wrap gap-4">
             <a
-              href="/admin"
+              href="http://localhost:3000/"
               className="rounded-lg bg-blue-700 px-6 py-3 font-semibold text-white transition hover:bg-blue-800"
             >
-              Відкрити панель керування
+              Відкрити публічну сторінку
             </a>
 
             <a

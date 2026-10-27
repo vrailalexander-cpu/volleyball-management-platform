@@ -1,77 +1,297 @@
-import "dotenv/config";
-import express, { NextFunction, Request, Response } from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import cors from "cors";
-import helmet from "helmet";
-import { z } from "zod";
-import { pool } from "./db";
+import dotenv from "dotenv";
+import { Pool } from "pg";
+
+dotenv.config();
 
 const app = express();
-const port = Number(process.env.PORT || 4000);
-app.use(helmet());
-app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:3000").split(",").map(v => v.trim()) }));
-app.use(express.json({ limit: "1mb" }));
+const PORT = Number(process.env.PORT) || 4000;
 
-app.get("/api/health", async (_req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ status: "ok", service: "volleyball-backend", database: "connected", timestamp: new Date().toISOString() });
-  } catch {
-    res.status(503).json({ status: "degraded", service: "volleyball-backend", database: "unavailable" });
+app.use(cors());
+app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+});
+
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl:
+        process.env.DATABASE_SSL === "true"
+          ? { rejectUnauthorized: false }
+          : undefined,
+      connectionTimeoutMillis: 5000,
+    })
+  : null;
+
+const demoData: Record<string, Record<string, unknown>[]> = {
+  players: [
+    {
+      id: 1,
+      name: "Олексій Петренко",
+      position: "Пасуючий",
+      experience: 2,
+      status: "Активний",
+    },
+    {
+      id: 2,
+      name: "Іван Коваленко",
+      position: "Нападник",
+      experience: 3,
+      status: "Активний",
+    },
+    {
+      id: 3,
+      name: "Сергій Мельник",
+      position: "Блокуючий",
+      experience: 1,
+      status: "Активний",
+    },
+    {
+      id: 4,
+      name: "Дмитро Шевченко",
+      position: "Ліберо",
+      experience: 4,
+      status: "Неактивний",
+    },
+  ],
+  teams: [
+    {
+      id: 1,
+      name: "ВК Львів",
+      city: "Львів",
+      category: "Доросла",
+      status: "Активна",
+    },
+    {
+      id: 2,
+      name: "ВК Молодь",
+      city: "Львів",
+      category: "Молодіжна",
+      status: "Активна",
+    },
+  ],
+  trainings: [
+    {
+      id: 1,
+      title: "Технічна підготовка",
+      date: "2026-10-28",
+      time: "17:00",
+      location: "Спортивний зал №1",
+      status: "Заплановано",
+    },
+    {
+      id: 2,
+      title: "Тактичне тренування",
+      date: "2026-10-29",
+      time: "18:00",
+      location: "Спортивний зал №1",
+      status: "Заплановано",
+    },
+    {
+      id: 3,
+      title: "Фізична підготовка",
+      date: "2026-10-30",
+      time: "16:00",
+      location: "Фітнес-зал",
+      status: "Заплановано",
+    },
+  ],
+  competitions: [
+    {
+      id: 1,
+      name: "Чемпіонат області з волейболу",
+      date: "2026-11-07",
+      location: "Львів",
+      status: "Заплановано",
+    },
+    {
+      id: 2,
+      name: "Кубок міста",
+      date: "2026-11-14",
+      location: "Львів",
+      status: "Заплановано",
+    },
+  ],
+  matches: [
+    {
+      id: 1,
+      homeTeam: "ВК Львів",
+      awayTeam: "ВК Молодь",
+      date: "2026-10-20",
+      score: "3:1",
+      status: "Завершено",
+    },
+    {
+      id: 2,
+      homeTeam: "ВК Львів",
+      awayTeam: "ВК Карпати",
+      date: "2026-11-07",
+      score: null,
+      status: "Заплановано",
+    },
+  ],
+};
+
+type Resource = keyof typeof demoData;
+
+const tableNames: Record<Resource, string> = {
+  players: "players",
+  teams: "teams",
+  trainings: "trainings",
+  competitions: "competitions",
+  matches: "matches",
+};
+
+async function getResource(resource: Resource) {
+  if (!pool) {
+    return {
+      data: demoData[resource],
+      source: "demo",
+    };
   }
-});
 
-app.get("/api/players", async (_req, res, next) => {
   try {
-    const result = await pool.query("SELECT id, full_name AS name, jersey_number AS number, position, age, status FROM team_players ORDER BY jersey_number");
-    res.json({ data: result.rows, total: result.rowCount ?? 0 });
-  } catch (error) { next(error); }
-});
-
-app.get("/api/trainings", async (_req, res, next) => {
-  try {
-    const result = await pool.query("SELECT id, title, session_date AS date, duration_minutes AS duration, focus, location, notes FROM training_sessions ORDER BY session_date ASC LIMIT 100");
-    res.json({ data: result.rows, total: result.rowCount ?? 0 });
-  } catch (error) { next(error); }
-});
-
-app.get("/api/competitions", async (_req, res, next) => {
-  try {
-    const result = await pool.query("SELECT id, title, opponent, match_date AS date, venue, status, team_score AS score, opponent_score AS opponent_score FROM competitions ORDER BY match_date ASC LIMIT 100");
-    res.json({ data: result.rows, total: result.rowCount ?? 0 });
-  } catch (error) { next(error); }
-});
-
-const trainingSchema = z.object({
-  title: z.string().trim().min(3).max(160),
-  date: z.string().datetime({ offset: true }),
-  duration: z.number().int().min(15).max(300),
-  focus: z.string().trim().min(2).max(120),
-  location: z.string().trim().min(2).max(160).default("Основний зал"),
-  notes: z.string().max(4000).default("")
-});
-
-app.post("/api/trainings", async (req, res, next) => {
-  const parsed = trainingSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid training data", details: parsed.error.flatten() });
-    return;
-  }
-  try {
-    const t = parsed.data;
     const result = await pool.query(
-      `INSERT INTO training_sessions (title, session_date, duration_minutes, focus, location, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, title, session_date AS date, duration_minutes AS duration, focus, location, notes`,
-      [t.title, t.date, t.duration, t.focus, t.location, t.notes]
+      `SELECT * FROM "${tableNames[resource]}" ORDER BY id DESC LIMIT 200`
     );
-    res.status(201).json({ data: result.rows[0] });
-  } catch (error) { next(error); }
+
+    return {
+      data: result.rows,
+      source: "database",
+    };
+  } catch (error) {
+    console.error(
+      `Помилка читання таблиці ${tableNames[resource]}:`,
+      error instanceof Error ? error.message : error
+    );
+
+    return {
+      data: demoData[resource],
+      source: "demo",
+      warning: "Таблиця недоступна. Показано демонстраційні дані.",
+    };
+  }
+}
+
+app.get("/", (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: "Volleyball Management API працює",
+    version: "1.0.0",
+    endpoints: [
+      "/api/health",
+      "/api",
+      "/api/players",
+      "/api/teams",
+      "/api/trainings",
+      "/api/competitions",
+      "/api/matches",
+    ],
+  });
 });
 
-app.use((_req, res) => res.status(404).json({ error: "Route not found" }));
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(error);
-  res.status(500).json({ error: "Internal server error" });
+app.get("/api", (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: "API управління волейбольною командою",
+    resources: Object.keys(demoData),
+  });
 });
 
-app.listen(port, () => console.log(`Volleyball API listening on http://localhost:${port}`));
+app.get("/api/health", async (_req: Request, res: Response) => {
+  let database = "not_configured";
+
+  if (pool) {
+    try {
+      await pool.query("SELECT 1");
+      database = "connected";
+    } catch {
+      database = "disconnected";
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    status: "ok",
+    database,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+for (const resource of Object.keys(demoData) as Resource[]) {
+  app.get(`/api/${resource}`, async (_req: Request, res: Response) => {
+    const result = await getResource(resource);
+
+    res.status(200).json({
+      success: true,
+      count: result.data.length,
+      source: result.source,
+      data: result.data,
+      ...("warning" in result ? { warning: result.warning } : {}),
+    });
+  });
+}
+
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    status: "ok",
+  });
+});
+
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: "Маршрут не знайдено",
+    path: req.originalUrl,
+  });
+});
+
+app.use(
+  (
+    error: Error,
+    _req: Request,
+    res: Response,
+    _next: NextFunction
+  ) => {
+    console.error("Помилка API:", error.message);
+
+    if (res.headersSent) {
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Внутрішня помилка сервера",
+    });
+  }
+);
+
+const server = app.listen(PORT, () => {
+  console.log(`API запущено: http://localhost:${PORT}`);
+  console.log(`Перевірка стану: http://localhost:${PORT}/api/health`);
+  console.log(`Список гравців: http://localhost:${PORT}/api/players`);
+});
+
+async function shutdown() {
+  server.close(async () => {
+    if (pool) {
+      await pool.end().catch((error: unknown) => {
+        console.error("Помилка закриття PostgreSQL:", error);
+      });
+    }
+
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => void shutdown());
+process.on("SIGTERM", () => void shutdown());

@@ -18,7 +18,7 @@ export default async function HomePage() {
   const nextTraining = trainings.data[0];
   const nextMatch = competitions.data.find(match => match.status === "upcoming");
   return <main>
-    <nav className="nav wrap"><Link className="brand" href="/">VOLLEY<span>PRO</span></Link><div className="nav-links"><a href="#team">Команда</a><a href="#training">Тренування</a><a href="#matches">Змагання</a><a className="nav-admin" href={`${process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:3001"}`}>CMS ↗</a></div></nav>
+    <nav className="nav wrap"><Link className="brand" href="/">VOLLEY<span>PRO</span></Link><div className="nav-links"><a href="#team">Команда</a><a href="#training">Тренування</a><a href="#matches">Змагання</a><a className="nav-admin" href={`${process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:3001"}/admin`}>CMS ↗</a></div></nav>
     <section className="hero">
       <div className="hero-glow" />
       <div className="wrap hero-inner">
